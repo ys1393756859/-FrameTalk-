@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>帧言 FrameTalk</title>
+    <style>
+      html, body, #root { height: 100%; margin: 0; background: #141414; }
+      .comment-marker:hover .marker-dot { transform: scale(1.4); }
+      /* 通用表格固定尺寸：表体在容器内滚动，表头/分页器不动，内容不改变布局 */
+      .ft-data-table .ant-table-wrapper,
+      .ft-data-table .ant-spin-nested-loading,
+      .ft-data-table .ant-spin-container {
+        flex: 1; min-height: 0; display: flex; flex-direction: column;
+      }
+      .ft-data-table .ant-table {
+        flex: 1; min-height: 0; display: flex; flex-direction: column;
+      }
+      .ft-data-table .ant-table-container {
+        flex: 1; min-height: 0; overflow: auto;
+      }
+      .ft-data-table .ant-table-pagination {
+        margin: 12px 0 0 !important; flex-shrink: 0;
+      }
+      /* 超长表格：列超宽时表头吸附、滚动条贴容器底部且不与内容重叠 */
+      .ft-data-table .ant-table-content { min-height: 100%; }
+      .ft-data-table .ant-table-content > table { min-width: 100%; }
+      .ft-data-table .ant-table-thead > tr > th {
+        position: sticky; top: 0; z-index: 2;
+      }
+      .ft-data-table .ant-table-body { overflow: auto auto; }
+      /* 细滚动条：横向拖动更省空间 */
+      .ft-data-table ::-webkit-scrollbar { width: 8px; height: 8px; }
+      .ft-data-table ::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 4px; }
+      .ft-data-table ::-webkit-scrollbar-thumb:hover { background: #555; }
+      .ft-data-table ::-webkit-scrollbar-corner { background: transparent; }
+
+      /* 信息面板：叠放卡片式缩略图/封面（PhotoCard），底边留白 + 行间负边距形成叠放感 */
+      .ft-photo-card {
+        position: relative;
+        background: #161616;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        padding: 4px 4px 10px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .55);
+        transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+      }
+      .ft-photo-card:hover {
+        transform: translateY(-3px) scale(1.03);
+        border-color: #4a4a4a;
+        box-shadow: 0 10px 22px rgba(0, 0, 0, .75);
+        z-index: 5;
+      }
+      .ft-photo-card .ant-image-img { border-radius: 5px; }
+
+      /* 帧缩略图牌堆：垫在顶牌下面的"牌背"，露出少许错位边缘体现厚度 */
+      .ft-deck-back {
+        position: absolute; inset: 0;
+        background: #161616;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .55);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

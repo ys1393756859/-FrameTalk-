@@ -1,0 +1,27 @@
+{
+  "name": "frametalk",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.22.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "pnpm --filter @frametalk/web build",
+    "dev:server": "pnpm --filter @frametalk/server dev",
+    "dev:web": "pnpm --filter @frametalk/web dev",
+    "dev:worker": "pnpm --filter @frametalk/server dev:worker",
+    "db:migrate": "pnpm --filter @frametalk/server db:migrate",
+    "db:migrate:dev": "pnpm --filter @frametalk/server db:migrate:dev",
+    "seed-demo": "pnpm --filter @frametalk/server seed-demo",
+    "gen:patterns": "tsx scripts/gen-patterns.ts",
+    "test": "vitest run",
+    "test:compat": "pnpm --filter @frametalk/server test:compat",
+    "test:frame": "playwright test -c e2e/playwright.config.ts e2e/tests/frame.spec.ts",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "tsx": "^4.20.3",
+    "vitest": "^3.2.4",
+    "@playwright/test": "^1.56.0"
+  }
+}

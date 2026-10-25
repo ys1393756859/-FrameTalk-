@@ -1,0 +1,296 @@
+// ⚠️ 血泪教训（2026-10-24）：手工生成迁移时，`prisma migrate diff --shadow-database-url`
+// 绝对不可指向真实业务库！Prisma 会对影子库执行 RESET（drop 全部表重建），
+// 指错库 = 真库数据全部清空。本库曾因此误清掉九界.mp4 的全部 DB 记录
+// （媒体文件在磁盘幸存，靠 scripts/restore-jiujie.ts 重建记录 + 重新转码恢复）。
+// 正确做法：使用专用影子库 postgres://frametalk:frametalk@localhost:5433/frametalk_shadow
+//（一次性创建：docker exec frametalk-pg psql -U frametalk -c "CREATE DATABASE frametalk_shadow OWNER frametalk;"）。
+// 另外：对没有 _prisma_migrations 记录的库，先逐条 `prisma migrate resolve --applied <name>`
+// 基线，再 `prisma migrate deploy`；切勿直接 migrate dev（会触发 reset）。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  name               String
+  email              String?   @unique
+  phone              String?   @unique // 手机号（登录账号之一，与邮箱至少填一个）
+  passwordHash       String
+  isAdmin            Boolean   @default(false)
+  title              String? // 职位：导演 / 制片 / 剪辑 / 生成 等
+  mustChangePassword Boolean   @default(true)
+  disabledAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  sessions      Session[]
+  memberships   ProjectMember[]
+  uploads       AssetVersion[]  @relation("uploader")
+  comments      Comment[]
+  frameLinks    FrameLink[]
+  notifications Notification[]
+  auditLogs     AuditLog[]      @relation("actor")
+}
+
+model Session {
+  id        String   @id // sha256(token)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Project {
+  id           String    @id @default(uuid())
+  name         String    @unique
+  kind         String    @default("self") // self 自制 | external 外部
+  description  String?
+  customLabels Json? // 自定义批注标签 [{name,color}]，内置标签见 shared 常量
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  members ProjectMember[]
+  folders Folder[]
+  assets  Asset[]
+
+  feishuBuffer FeishuNotifyBuffer?
+}
+
+model ProjectMember {
+  projectId String
+  userId    String
+  role      String // manager | editor | reviewer | viewer
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model Folder {
+  id        String    @id @default(uuid())
+  projectId String
+  parentId  String?
+  name      String
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent   Folder?  @relation("tree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Folder[] @relation("tree")
+  assets   Asset[]
+
+  @@index([projectId])
+}
+
+model Asset {
+  id           String    @id @default(uuid())
+  projectId    String
+  folderId     String?
+  name         String
+  description  String? // 文件描述（信息面板可编辑）
+  kind         String // video | audio | image | other
+  reviewStatus String    @default("pending") // pending | in_review | needs_change | approved
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folder     Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  versions   AssetVersion[]
+  frameLinks FrameLink[]
+
+  @@index([projectId, folderId])
+  @@index([deletedAt])
+}
+
+model AssetVersion {
+  id                String   @id @default(uuid())
+  assetId           String
+  versionNo         Int
+  originalName      String
+  filePath          String // 相对 MEDIA_DIR，如 originals/{id}/xxx.mov
+  size              BigInt
+  mime              String
+  status            String   @default("queued") // uploading | queued | transcoding | ready | failed | unsupported
+  progress          Int      @default(0) // 0-100
+  error             String?
+  fpsNum            Int?
+  fpsDen            Int?
+  frameCount        Int?
+  durationSec       Float?
+  startTimecode     String?
+  startFrames       Int      @default(0)
+  width             Int?
+  height            Int?
+  probe             Json?
+  transcodeAttempts Int      @default(0)
+  uploadedBy        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  asset      Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  uploader   User?        @relation("uploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
+  renditions Rendition[]
+  comments   Comment[]
+  baseLinks  FrameLink[]  @relation("linkBase")
+  linksto    FrameLink[]  @relation("linkTarget")
+
+  @@index([assetId])
+  @@index([status])
+}
+
+model Rendition {
+  id        String   @id @default(uuid())
+  versionId String
+  kind      String // proxy | poster | sprite | waveform
+  filePath  String // 相对 MEDIA_DIR
+  size      BigInt   @default(0)
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  version AssetVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, kind])
+  @@index([versionId])
+}
+
+model Comment {
+  id         String    @id @default(uuid())
+  versionId  String
+  parentId   String?
+  authorId   String
+  frameIn    Int
+  frameOut   Int? // 存在则为区间批注（>= frameIn）
+  body       String?
+  drawing    Json? // {shapes:[...]}，坐标归一化 0~1
+  labels     String[]  @default([])
+  mentions   String[]  @default([])
+  resolvedAt DateTime?
+  resolvedBy String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  version     AssetVersion        @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  parent      Comment?            @relation("thread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies     Comment[]           @relation("thread")
+  author      User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  attachments CommentAttachment[]
+
+  @@index([versionId, frameIn])
+}
+
+/**
+ * 关联帧：主版本（最新版）某帧 ↔ 对比版本某帧，双向跳转。
+ * 一对多 = 多条记录；(base, target) 同帧对唯一
+ */
+model FrameLink {
+  id            String   @id @default(uuid())
+  assetId       String
+  baseVersionId String // 主版本（批注基准 = 最新版）
+  baseFrame     Int
+  versionId     String // 被关联的对比版本
+  frame         Int
+  note          String?
+  createdBy     String
+  createdAt     DateTime @default(now())
+
+  asset   Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  base    AssetVersion @relation("linkBase", fields: [baseVersionId], references: [id], onDelete: Cascade)
+  target  AssetVersion @relation("linkTarget", fields: [versionId], references: [id], onDelete: Cascade)
+  creator User         @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([baseVersionId, baseFrame, versionId, frame])
+  @@index([assetId])
+}
+
+/**
+ * 批注附件：图片/视频/文档。先上传落盘（commentId 为空），提交批注时绑定
+ */
+model CommentAttachment {
+  id         String   @id @default(uuid())
+  commentId  String?
+  filename   String // 展示/下载名（已 sanitize）
+  filePath   String // 相对 MEDIA_DIR：attachments/<id>/<filename>
+  mime       String
+  size       BigInt   @default(0)
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([commentId])
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String // mention | comment | version | status
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String // login | download | delete | member.add | ...
+  target    String // 人类可读的对象描述，如 项目「九界」/ 版本 九界-v3（展示用，不保证可反查）
+  targetType String? // 机器引用类型：project | version | asset | user | comment | framelink | group
+  targetId  String? // 机器引用 id（统计/回溯用）
+  ip        String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  actor User? @relation("actor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([targetType, targetId])
+}
+
+/**
+ * 系统设置：按分组存储 JSON（后台可改，即时生效）。新增功能 = 注册新分组
+ */
+model SettingGroup {
+  key       String   @id // storage | general | security | transcode | ...
+  data      Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+/**
+ * 飞书群 @ 通知聚合缓冲：每项目一行（notify/feishu.ts 读写）。
+ * pending = 待发评论摘要数组；dueAt = 下次可发送时间（聚合窗口/免打扰/重试推迟）；
+ * lastSentAt + sentToday/dayStamp 做限流；attempts = 连续发送失败计数（超限丢弃防死循环）。
+ */
+model FeishuNotifyBuffer {
+  projectId  String    @id
+  pending    Json      @default("[]")
+  firstAt    DateTime? // pending 首条评论入缓冲时间（>24h 视为过期作废）
+  dueAt      DateTime? // null = 无待发内容
+  lastSentAt DateTime?
+  sentToday  Int       @default(0)
+  dayStamp   String? // 本地 YYYY-MM-DD，跨天重置 sentToday
+  attempts   Int       @default(0)
+  updatedAt  DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([dueAt])
+}

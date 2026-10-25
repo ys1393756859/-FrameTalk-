@@ -1,0 +1,28 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+
+# 内部待办清单（不入库）
+/TODO.md
+
+# 运行日志（可能含真实配置/成员信息，勿入库）
+*.log
+
+# 运行期数据
+/data/
+upload-test/
+
+# 内部测试产物与截图
+/test-assets/*
+!/test-assets/webdav-stub.mjs
+/gui-test-screenshots/
+e2e/test-results/
+e2e/playwright-report/
+
+# 代码生成产物
+apps/server/src/generated/
+
+# 本地工具目录
+.zcode/
+.claude/

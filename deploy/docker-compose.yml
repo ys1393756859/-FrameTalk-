@@ -1,0 +1,56 @@
+name: frametalk
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: frametalk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置数据库密码}
+      POSTGRES_DB: frametalk
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U frametalk -d frametalk"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    command: pnpm --filter @frametalk/server start
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &appenv
+      DATABASE_URL: postgres://frametalk:${POSTGRES_PASSWORD}@postgres:5432/frametalk
+      MEDIA_DIR: /data/media
+      PORT: "3000"
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-admin@local}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-changeme123}
+      INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-管理员}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - ${MEDIA_DIR:-/data/media}:/data/media
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    command: pnpm --filter @frametalk/server start:worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *appenv
+      WORKER_ID: worker-1
+    volumes:
+      - ${MEDIA_DIR:-/data/media}:/data/media
+
+volumes:
+  pgdata:

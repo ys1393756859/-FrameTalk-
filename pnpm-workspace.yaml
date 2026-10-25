@@ -1,0 +1,21 @@
+packages:
+  - apps/*
+  - packages/*
+
+# unicode-properties@1.4.0 的 exports 指向不存在的 dist.main.cjs（发布事故），钉回 1.3.1
+overrides:
+  unicode-properties: 1.3.1
+
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - esbuild
+  - '@node-rs/argon2'
+  - pdfkit
