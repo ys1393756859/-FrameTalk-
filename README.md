@@ -17,7 +17,13 @@
 
 帧言（FrameTalk）是一个可完全私有化部署的音视频审片协作平台。Docker Compose 三容器（API / 转码 Worker / PostgreSQL）即可运行，不依赖 Redis、对象存储和 nginx，单机可支撑约 100 人团队、20 人同时在线审阅。
 
-<!-- 建议在此放置产品截图（审阅页 / 多版本对比 / 管理后台），图片放 docs/screenshots/ -->
+## 产品截图
+
+![审阅页](https://image.9xsecndns.cn/image/uicon/646f98d341d829ccb006f548b84080bdc5ef47e580aa88.jpg)
+
+![多版本对比](https://image.9xsecndns.cn/image/uicon/3afe0b7d2f3cb6095b48e949684e9a83b32c61ceca65e6.jpg)
+
+![管理后台](https://image.9xsecndns.cn/image/uicon/453dcb16aed89c3b29bceb3f4c62ae84b0c8914896f1.jpg)
 
 ## 功能特性
 
